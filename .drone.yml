@@ -1,0 +1,39 @@
+kind: pipeline
+name: default
+
+steps:
+- name: build
+  image: docker
+  commands:
+    - docker build . -t dsirf
+    - docker rm -f dsirf_poc_rev || true
+    - docker run -d --network=web --name dsirf_poc_rev -v "/etc/timezone:/etc/timezone:ro" -v "/etc/localtime:/etc/localtime:ro" --label traefik.backend=poc_rev --label traefik.port=8080 --label traefik.docker.network=web --label traefik.frontend.rule=Host:rev.poc.marschall.systems --label traefik.enable=true dsirf
+  volumes:
+    - name: dockersock
+      path: /var/run/docker.sock
+  when:
+    event:
+      exclude:
+        - promote
+- name: publish_to_prod
+  image: docker
+  commands:
+    - docker build . -t dsirf:stable
+    - docker rm -f dsirf_poc || true
+    - docker run -d --network=web --name dsirf_poc -v "/etc/timezone:/etc/timezone:ro" -v "/etc/localtime:/etc/localtime:ro" --label traefik.backend=poc_prod --label traefik.port=8080 --label traefik.docker.network=web --label traefik.frontend.rule=Host:prod.poc.marschall.systems --label traefik.enable=true dsirf:stable
+  volumes:
+    - name: dockersock
+      path: /var/run/docker.sock
+  when:
+    event: [ promote ]
+    target: [ production ]
+
+volumes:
+- name: dockersock
+  host:
+    path: /var/run/docker.sock
+
+trigger:
+  branch:
+  - master
+
